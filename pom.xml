@@ -7,12 +7,24 @@
     <packaging>pom</packaging>
     <name>shardingsphere-jdbc-extension</name>
     <modules>
-        <module>shardingsphere-jdbc-nacos-config-extension</module>
+        <module>shardingsphere-jdbc-nacos-config</module>
+        <module>shardingsphere-jdbc-kingbase</module>
     </modules>
     <properties>
         <maven.compiler.source>17</maven.compiler.source>
         <maven.compiler.target>17</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <shardingsphere.version>5.5.2</shardingsphere.version>
+        <springcloud.nacos.version>2023.0.1.2</springcloud.nacos.version>
     </properties>
 
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.apache.shardingsphere</groupId>
+                <artifactId>shardingsphere-jdbc</artifactId>
+                <version>${shardingsphere.version}</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 </project>
