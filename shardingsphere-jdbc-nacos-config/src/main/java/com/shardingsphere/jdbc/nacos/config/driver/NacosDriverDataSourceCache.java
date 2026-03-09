@@ -24,67 +24,79 @@ public final class NacosDriverDataSourceCache {
     private final Map<String, DataSource> dataSourceMap = new ConcurrentHashMap<>();
 
     /**
-     * Get data source.
+     * 获取数据源，使用 URL 作为缓存键。
      *
-     * @param url       URL
-     * @param urlPrefix URL prefix
-     * @return got data source
+     * @param url       完整 URL
+     * @param urlPrefix URL 前缀，用于解析实际配置路径
+     * @return 数据源
      */
     public DataSource get(final String url, final String urlPrefix) {
-        if (dataSourceMap.containsKey(url)) {
-            return dataSourceMap.get(url);
-        }
-        return dataSourceMap.computeIfAbsent(url, driverUrl -> createDataSource(NacosShardingSphereURL.parse(driverUrl.substring(urlPrefix.length()))));
+        return dataSourceMap.computeIfAbsent(url, driverUrl ->
+        {
+            try {
+                return createDataSource(NacosShardingSphereURL.parse(driverUrl.substring(urlPrefix.length())));
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        });
     }
 
-    @SuppressWarnings("unchecked")
-    private <T extends Throwable> DataSource createDataSource(final NacosShardingSphereURL url) throws T {
+    /**
+     * 创建数据源。
+     *
+     * @param url 完整 URL
+     * @return 数据源
+     * @throws Exception 创建数据源异常
+     */
+    private DataSource createDataSource(final NacosShardingSphereURL url) throws Exception {
         try {
             String configurationSubject = url.getConfigurationSubject();
 
-            /*
-             * 当存在多个配置时, 则进行合并
-             *
-             * 格式为 jdbc:shardingsphere:nacos:sharding.yaml,s# ShardingSphere JDBC Extension
-
-ShardingSphere JDBC 扩展项目，提供对国产数据库（人大金仓）的支持以及 Nacos 配置中心的集成。
-
-## 📦 项目结构
-
-harding2.yaml?serverAddr=${spring.cloud.nacos.config.server-addr}&namespace=${spring.cloud.nacos.config.namespace}
-             */
+            // 当配置主题包含逗号时，表示多个配置文件需要合并
+            // 格式示例: jdbc:shardingsphere:nacos:sharding.yaml,sharding2.yaml?serverAddr=${spring.cloud.nacos.config.server-addr}&namespace=${spring.cloud.nacos.config.namespace}
             if (configurationSubject.contains(",")) {
-                ByteArrayOutputStream baos = new ByteArrayOutputStream();
-                String[] split = configurationSubject.split(",");
-                String sourceType = url.getSourceType();
-                Properties queryProps = url.getQueryProps();
-
-                for (String each : split) {
-                    NacosShardingSphereURL urlEach = new NacosShardingSphereURL(sourceType, each, queryProps);
-                    NacosShardingSphereURLLoadEngine urlLoadEngine = new NacosShardingSphereURLLoadEngine(urlEach);
-                    byte[] bytes = urlLoadEngine.loadContent();
-                    merge(baos, bytes);
-                }
+                ByteArrayOutputStream baos = getBaos(url, configurationSubject);
                 return YamlShardingSphereDataSourceFactory.createDataSource(baos.toByteArray());
             } else {
-                // 单个配置
+                // 单个配置文件
                 NacosShardingSphereURLLoadEngine urlLoadEngine = new NacosShardingSphereURLLoadEngine(url);
                 return YamlShardingSphereDataSourceFactory.createDataSource(urlLoadEngine.loadContent());
             }
         } catch (final IOException ex) {
-            throw (T) new SQLException(ex);
-        } catch (final SQLException ex) {
-            throw (T) ex;
+            // 将 IO 异常包装为 SQL 异常
+            throw new SQLException(ex);
         }
     }
 
+    /**
+     * 获取 ByteArrayOutputStream。
+     *
+     * @param url                   完整 URL
+     * @param configurationSubject 配置主题
+     * @return ByteArrayOutputStream
+     * @throws IOException IO 异常
+     */
+    private static ByteArrayOutputStream getBaos(NacosShardingSphereURL url, String configurationSubject) throws IOException {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        String[] split = configurationSubject.split(",");
+        String sourceType = url.getSourceType();
+        Properties queryProps = url.getQueryProps();
+
+        for (String each : split) {
+            NacosShardingSphereURL urlEach = new NacosShardingSphereURL(sourceType, each, queryProps);
+            NacosShardingSphereURLLoadEngine urlLoadEngine = new NacosShardingSphereURLLoadEngine(urlEach);
+            byte[] bytes = urlLoadEngine.loadContent();
+            baos.write(bytes);  // 合并内容
+        }
+        return baos;
+    }
+
+    /**
+     * 获取数据源缓存。
+     *
+     * @return 数据源缓存
+     */
     public Map<String, DataSource> getDataSourceMap() {
         return dataSourceMap;
-    }
-
-    public static void merge(ByteArrayOutputStream baos, byte[]... arrays) {
-        for (byte[] arr : arrays) {
-            baos.writeBytes(arr);
-        }
     }
 }
