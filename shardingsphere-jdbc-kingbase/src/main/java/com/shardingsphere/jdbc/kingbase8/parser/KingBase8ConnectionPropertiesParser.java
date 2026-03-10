@@ -22,7 +22,7 @@ public final class KingBase8ConnectionPropertiesParser implements ConnectionProp
     /**
      * 获取当前数据库Schema的正则表达式
      */
-    private static final Pattern pattern = Pattern.compile("(?:\\?|&)currentSchema=([^&]*)");
+    private static final Pattern pattern = Pattern.compile("[?&]currentSchema=([^&]*)");
 
 
     @Override
